@@ -1,0 +1,18 @@
+{
+	"folders":
+	[
+		{
+			"path": "${project_folder}",
+			"folder_exclude_patterns":
+			[
+				"Backups"
+			]
+		}
+	],
+	"settings":
+	{
+		// The directory where we'll keep our backups.
+	    "backup_dir": "${project_folder}/Backups",
+	    "batch_backup_dir": "${project_folder}/Backups/Batches"
+	}
+}

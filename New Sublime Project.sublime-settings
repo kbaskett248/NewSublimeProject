@@ -1,0 +1,12 @@
+{
+    // This controls the location where project folders are stored
+    "project_root": "C:/Workspace",
+    
+    // This controls whether *.sublime-project files are stored in project_storage or in project_root
+    // false: Store *.sublime-project files in the project_root
+    // true: Store *.sublime-project files in project_storage
+    "use_separate_sublime_project_storage": false,
+    
+    // Location to store *.sublime_project files if "use_separate_sublime_project_storage" is true
+    "project_storage": "C:/Workspace"
+}
