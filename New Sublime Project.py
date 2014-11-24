@@ -13,17 +13,24 @@ logger.setLevel(logging.DEBUG)
 
 
 def get_template_paths():
-    paths = {'Default': os.path.join(sublime.packages_path(),'New Sublime Project','Templates'),
-             'User': os.path.join(sublime.packages_path(),'User','Sublime Project Templates')}
+    paths = {'Default': os.path.join(sublime.packages_path(),
+                                     'New Sublime Project',
+                                     'Templates'),
+             'User': os.path.join(sublime.packages_path(),
+                                  'User',
+                                  'Sublime Project Templates')}
     logger.debug('Template paths: %s', paths)
     return paths
+
 
 def get_env(environ_name):
     temp = os.getenv(environ_name)
     if (temp is None):
-        if ('ProgramFiles' in environ_name) or ('ProgramW6432' in environ_name):
+        if (('ProgramFiles' in environ_name) or
+                ('ProgramW6432' in environ_name)):
             temp = os.getenv('ProgramFiles')
     return temp
+
 
 def get_program_path():
     path = None
@@ -57,6 +64,7 @@ def get_program_path():
 
     return path
 
+
 def open_folder(path):
     if os.path.isdir(path):
         plat = sublime.platform()
@@ -66,6 +74,7 @@ def open_folder(path):
             subprocess.Popen(('open', path))
         elif (plat == 'linux'):
             subprocess.Popen(('xdg-open', path))
+
 
 def get_project_roots():
     settings = sublime.load_settings("New Sublime Project.sublime-settings")
@@ -78,6 +87,7 @@ def get_project_roots():
     yield project_root
     yield project_storage
 
+
 def create_dir(dir):
     # Make the directory if it doesn't exist. If it does, just eat exception
     print("Creating dir " + dir)
@@ -89,21 +99,21 @@ def create_dir(dir):
 
 
 class NewSublimeProjectCommand(sublime_plugin.ApplicationCommand):
-    disallowed_characters = {'\\':'-',
-                             '/':'-',
-                             ':':'-',
-                             '*':'_',
-                             '<':'_',
-                             '>':'_',
-                             '|':'_',
-                             '*':'_',
-                             '"':'_'}
+    disallowed_characters = {'\\': '-',
+                             '/': '-',
+                             ':': '-',
+                             '*': '_',
+                             '<': '_',
+                             '>': '_',
+                             '|': '_',
+                             '*': '_',
+                             '"': '_'}
 
-    def run(self, type = None):
+    def run(self, type=None):
         self.type = type
         self.populate_vars()
-        view = sublime.active_window().show_input_panel('Project Name', 
-            "New Project", self.create_project, None, None)
+        view = sublime.active_window().show_input_panel(
+            'Project Name', "New Project", self.create_project, None, None)
         view.run_command('move_to', {'to': 'hardbol', 'extend': True})
 
     def populate_vars(self):
@@ -117,11 +127,12 @@ class NewSublimeProjectCommand(sublime_plugin.ApplicationCommand):
 
     def populate_var_if_exist(self, var_name, environ_name):
         temp = os.getenv(environ_name)
-        if (temp != None):
-            self.vars[var_name] = temp.replace('\\','/')
-        elif ('ProgramFiles' in environ_name) or ('ProgramW6432' in environ_name):
+        if temp is not None:
+            self.vars[var_name] = temp.replace('\\', '/')
+        elif (('ProgramFiles' in environ_name) or
+              ('ProgramW6432' in environ_name)):
             self.populate_var_if_exist(var_name, 'ProgramFiles')
-        print (self.vars[var_name])
+        print(self.vars[var_name])
 
     def create_project(self, project_name):
         logger.info('Creating project: %s', project_name)
@@ -129,12 +140,13 @@ class NewSublimeProjectCommand(sublime_plugin.ApplicationCommand):
         self.project_file = None
         self.project_name = project_name
         self.vars['project_name'] = project_name
-        folder_name = NewSublimeProjectCommand.replace_disallowed_characters(project_name)
+        folder_name = NewSublimeProjectCommand.replace_disallowed_characters(
+            project_name)
         self.vars['folder_name'] = folder_name
 
         project_root, project_storage = get_project_roots()
         self.vars['project_root'] = project_root.replace('\\', '/')
-        self.project_folder = os.path.join(project_root,folder_name)
+        self.project_folder = os.path.join(project_root, folder_name)
         self.vars['project_folder'] = self.project_folder.replace('\\', '/')
         self.project_file_folder = os.path.join(project_storage, folder_name)
 
@@ -148,14 +160,17 @@ class NewSublimeProjectCommand(sublime_plugin.ApplicationCommand):
             if (self.project_file is None):
                 self.check_path_for_project(self.project_folder)
             if (self.project_file is None):
-                sublime.status_message('Project folder already exists, but no project file found')
+                sublime.status_message(
+                    'Project folder already exists, but no project file found')
                 self.open_project()
-                print('Project folder already exists, but no project file found')
+                print(
+                    'Project folder already exists, but no project file found')
         else:
             self.get_templates()
             logger.debug('Templates: %s', self.templates)
-            if self.type == None:
-                sublime.active_window().show_quick_panel([x for x, y in self.templates], self.set_type)
+            if self.type is None:
+                sublime.active_window().show_quick_panel(
+                    [x for x, y in self.templates], self.set_type)
             elif self.type in [x for x, y in self.templates]:
                 for x, y in self.templates:
                     if x == self.type:
@@ -167,35 +182,41 @@ class NewSublimeProjectCommand(sublime_plugin.ApplicationCommand):
         for root, dirs, files in os.walk(path):
             for f in files:
                 if '.sublime-workspace' in f:
-                    self.workspace_file = os.path.join(root, f).replace('\\', '/')
+                    self.workspace_file = os.path.join(root, f).replace(
+                        '\\', '/')
                     break
                 if '.sublime-project' in f:
-                    self.project_file = os.path.join(root, f).replace('\\', '/')
+                    self.project_file = os.path.join(root, f).replace(
+                        '\\', '/')
                     break
-            if (self.workspace_file is not None) or (self.project_file is not None):
-                sublime.status_message('Project already exists; opening project')
+            if ((self.workspace_file is not None) or
+                    (self.project_file is not None)):
+                sublime.status_message(
+                    'Project already exists; opening project')
                 self.open_project()
                 break
 
     @staticmethod
     def replace_disallowed_characters(path):
-        for t,r in NewSublimeProjectCommand.disallowed_characters.items():
-            path = path.replace(t,r)
+        for t, r in NewSublimeProjectCommand.disallowed_characters.items():
+            path = path.replace(t, r)
         return path
 
     def get_templates(self):
         self.templates = list()
-        for template_path in (x for x in get_template_paths().values() if os.path.isdir(x)):
+        for template_path in (x for x in get_template_paths().values() if
+                              os.path.isdir(x)):
             for d in os.listdir(template_path):
                 path = os.path.join(template_path, d)
                 if os.path.isdir(path):
                     self.templates.append((d, path))
-            
+
     def set_type(self, type):
         if type != -1:
             self.type, self.template_folder = self.templates[type]
             self.vars['type'] = self.type
-            self.vars['template_folder'] = self.template_folder.replace('\\', '/')
+            self.vars['template_folder'] = self.template_folder.replace(
+                '\\', '/')
             self.copy_templates()
 
     def copy_templates(self):
@@ -203,11 +224,11 @@ class NewSublimeProjectCommand(sublime_plugin.ApplicationCommand):
         self.project_file = ""
         self.vars['project_file'] = self.project_file
         for root, dirs, files in os.walk(self.template_folder):
-            suffix = root.replace(self.template_folder,'')
+            suffix = root.replace(self.template_folder, '')
             tmp_source = self.template_folder + suffix
             tmp_dest = self.project_folder + suffix
             create_dir(tmp_dest)
-            
+
             for d in dirs:
                 dest_folder = self.replace_vars(os.path.join(tmp_dest, d))
                 create_dir(dest_folder)
@@ -216,15 +237,19 @@ class NewSublimeProjectCommand(sublime_plugin.ApplicationCommand):
                 tmp_file = self.replace_vars(f)
                 dest_file = self.replace_vars(os.path.join(tmp_dest, tmp_file))
                 if '.sublime-project' in dest_file:
-                    dest_folder = self.replace_vars(self.project_file_folder + suffix)
+                    dest_folder = self.replace_vars(
+                        self.project_file_folder + suffix)
                     create_dir(dest_folder)
-                    dest_file = self.replace_vars(os.path.join(dest_folder, tmp_file))
+                    dest_file = self.replace_vars(
+                        os.path.join(dest_folder, tmp_file))
                     self.project_file = dest_file.replace('\\', '/')
                     self.vars['project_file'] = tmp_file
                 elif '.sublime-workspace' in dest_file:
-                    dest_folder = self.replace_vars(self.project_file_folder + suffix)
+                    dest_folder = self.replace_vars(
+                        self.project_file_folder + suffix)
                     create_dir(dest_folder)
-                    dest_file = self.replace_vars(os.path.join(dest_folder, tmp_file))
+                    dest_file = self.replace_vars(
+                        os.path.join(dest_folder, tmp_file))
                     self.workspace_file = dest_file.replace('\\', '/')
                     self.vars['workspace_file'] = tmp_file
                 self.copy_replace_files(os.path.join(tmp_source, f), dest_file)
@@ -232,7 +257,7 @@ class NewSublimeProjectCommand(sublime_plugin.ApplicationCommand):
         self.open_project()
         sublime.status_message('Creating and opening project')
 
-    def open_project(self, project_path = None):
+    def open_project(self, project_path=None):
         file_to_open = None
         if (project_path is not None):
             file_to_open = project_path.replace('/', '\\')
@@ -244,7 +269,7 @@ class NewSublimeProjectCommand(sublime_plugin.ApplicationCommand):
             file_to_open = self.project_folder.replace('/', '\\')
         cmd = '{0} "{1}"'.format(get_program_path(), file_to_open)
         logger.debug(cmd)
-        
+
         try:
             subprocess.Popen(cmd)
         except FileNotFoundError:
@@ -266,6 +291,7 @@ class NewSublimeProjectCommand(sublime_plugin.ApplicationCommand):
         dest.close()
         source.close()
 
+
 class ViewSublimeProjectsCommand(sublime_plugin.ApplicationCommand):
 
     def run(self):
@@ -285,9 +311,10 @@ class ViewSublimeProjectsCommand(sublime_plugin.ApplicationCommand):
     def is_visible(self):
         return self.is_enabled()
 
+
 class ViewTemplatesCommand(sublime_plugin.ApplicationCommand):
 
-    def run(self, user = False):
+    def run(self, user=False):
         paths = get_template_paths()
         if user:
             template_path = paths['User']
@@ -296,5 +323,3 @@ class ViewTemplatesCommand(sublime_plugin.ApplicationCommand):
 
         create_dir(template_path)
         open_folder(template_path)
-        
-        
