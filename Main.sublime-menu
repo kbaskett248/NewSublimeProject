@@ -14,7 +14,6 @@
             },
             {
                 "caption": "View Sublime Project Folder",
-                "mnemonic": "N",
                 "command": "view_sublime_projects",
                 "args": {}
             }
@@ -39,7 +38,7 @@
                             {
                                 "command": "open_file", "args":
                                 {
-                                    "file": "${packages}/New Sublime Project/New Sublime Project.sublime-settings"
+                                    "file": "${packages}/NewSublimeProject/New Sublime Project.sublime-settings"
                                 },
                                 "caption": "Settings – Default"
                             },
@@ -52,18 +51,8 @@
                             },
                             { "caption": "-" },
                             {
-                                "command": "view_templates", "args":
-                                {
-                                    "user": false
-                                },
-                                "caption": "Templates – Default"
-                            },
-                            {
-                                "command": "view_templates", "args":
-                                {
-                                    "user": true
-                                },
-                                "caption": "Templates – User"
+                                "command": "view_templates",
+                                "caption": "Templates"
                             }
                         ]
                     }

@@ -2,25 +2,39 @@ import errno
 import logging
 import os
 import re
+import shutil
 import subprocess
+from zipfile import ZipFile
 
 import sublime
 import sublime_plugin
 
+import NewSublimeProject.src.new_sublime_project_api
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+# logger.setLevel(logging.DEBUG)
 
+ExecutablePath = None
+TemplatePath = None
+TemplatesToInstall = NewSublimeProject.src.new_sublime_project_api.TemplatesToInstall
+DefaultVariables = NewSublimeProject.src.new_sublime_project_api.DefaultVariables
+register_default_variable = NewSublimeProject.src.new_sublime_project_api.register_default_variable
 
-def get_template_paths():
-    paths = {'Default': os.path.join(sublime.packages_path(),
-                                     'New Sublime Project',
-                                     'Templates'),
-             'User': os.path.join(sublime.packages_path(),
-                                  'User',
-                                  'Sublime Project Templates')}
-    logger.debug('Template paths: %s', paths)
-    return paths
+DISALLOWED_CHARACTERS = {'\\': '-',
+                         '/': '-',
+                         ':': '-',
+                         '*': '_',
+                         '<': '_',
+                         '>': '_',
+                         '|': '_',
+                         '*': '_',
+                         '"': '_'}
+
+TRANSFORM_UPPER = "U"
+TRANSFORM_LOWER = "L"
+TRANSFORM_HYPHEN = "-"
+TRANSFORM_UNDERSCORE = "_"
 
 
 def get_env(environ_name):
@@ -32,37 +46,10 @@ def get_env(environ_name):
     return temp
 
 
-def get_program_path():
-    path = None
-    plat = sublime.platform()
-    logger.debug('Platform = %s', plat)
-    if (plat == 'windows'):
-        version = sublime.version()[0]
-        logger.debug('Version = %s', version)
-        arch = sublime.arch()
-        logger.debug('Architecture = %s', arch)
-
-        folder = 'Sublime Text %s' % version
-
-        if (arch == 'x32'):
-            path = os.path.join(get_env('ProgramFiles'), folder)
-        elif (arch == 'x64'):
-            path = os.path.join(get_env('ProgramW6432'), folder)
-
-        if ((path is not None) and os.path.isdir(path)):
-            for f in os.listdir(path):
-                if (f.endswith('.exe') and ('sublime_text' in f)):
-                    path = os.path.join(path, f)
-                    break
-
-        if ((path is None) or (not os.path.isfile(path))):
-            path = 'sublime_text.exe'
-    elif (plat == 'osx'):
-        path = 'subl'
-    elif (plat == 'linux'):
-        pass
-
-    return path
+def replace_disallowed_characters(string):
+    for t, r in DISALLOWED_CHARACTERS.items():
+        string = string.replace(t, r)
+    return string
 
 
 def open_folder(path):
@@ -84,55 +71,156 @@ def get_project_roots():
     else:
         project_storage = project_root
 
-    yield project_root
-    yield project_storage
+    return (project_root, project_storage)
 
 
-def create_dir(dir):
+def create_dir(dir_):
     # Make the directory if it doesn't exist. If it does, just eat exception
-    print("Creating dir " + dir)
     try:
-        os.makedirs(dir)
+        os.makedirs(dir_)
     except OSError as e:
         if e.errno != errno.EEXIST:
             raise
+    else:
+        print("New Sublime Project: Creating directory " + dir_)
+
+
+def plugin_loaded():
+    global TemplatePath
+    set_executable_path()
+    setup_default_variables()
+    TemplatePath = os.path.join(sublime.packages_path(),
+                                'User',
+                                'Sublime Project Templates')
+    install_templates()
+
+
+def set_executable_path():
+    global ExecutablePath
+    path = sublime.executable_path()
+    if os.path.exists(path):
+        ExecutablePath = path
+        return
+    else:
+        path = None
+
+    plat = sublime.platform()
+    logger.debug('Platform = %s', plat)
+    if (plat == 'windows'):
+        version = sublime.version()[0]
+        logger.debug('Version = %s', version)
+        arch = sublime.arch()
+        logger.debug('Architecture = %s', arch)
+
+        folder = 'Sublime Text %s' % version
+
+        if (arch == 'x32'):
+            path = os.path.join(get_env('ProgramFiles'), folder)
+        elif (arch == 'x64'):
+            path = os.path.join(get_env('ProgramW6432'), folder)
+
+        if (path is not None) and os.path.isdir(path):
+            exe_path = os.path.join(path, 'subl.exe')
+            if os.path.isfile(exe_path):
+                path = exe_path
+            else:
+                exe_path = os.path.join(path, 'sublime_text.exe')
+                if os.path.isfile(exe_path):
+                    path = exe_path
+
+        if ((path is None) or (not os.path.isfile(path))):
+            path = 'sublime_text.exe'
+    elif (plat == 'osx'):
+        path = 'subl'
+    elif (plat == 'linux'):
+        path = 'subl'
+
+    ExecutablePath = path
+
+
+def setup_default_variables():
+    def populate_var_if_exist(var_name, env_name):
+        temp = get_env(env_name)
+        if temp is not None:
+            register_default_variable(var_name, temp.replace('\\', '/'))
+
+    register_default_variable('packages_path',
+                              sublime.packages_path().replace('\\', '/'))
+    populate_var_if_exist('program_files', 'ProgramFiles')
+    populate_var_if_exist('program_files_x86', 'ProgramFiles(x86)')
+    populate_var_if_exist('program_files_x64', 'ProgramW6432')
+
+
+def install_templates():
+    possible_templates = sublime.find_resources('*.zip')
+    for path, settings_file, setting in TemplatesToInstall:
+        settings = sublime.load_settings(settings_file)
+        if settings.get(setting, False):
+            print('New Sublime Project: Installing templates from ' + path)
+            for t in [x for x in possible_templates if x.startswith(path)]:
+                zip_name = os.path.split(t)[1]
+                template_name = os.path.splitext(zip_name)[0]
+
+                # Delete template zip file if it exists
+                zip_to = os.path.join(TemplatePath, zip_name)
+                if os.path.exists(zip_to):
+                    os.remove(zip_to)
+
+                # Delete existing template folder if it exists
+                template_path = os.path.join(TemplatePath, template_name)
+                if os.path.isdir(template_path):
+                    shutil.rmtree(template_path)
+
+                # Copy template zip to templates folder
+                zip_contents = sublime.load_binary_resource(t)
+                with open(zip_to, 'wb') as zip_target:
+                    zip_target.write(zip_contents)
+
+                # Extract template zip to templates folder
+                with ZipFile(zip_to) as zip_target:
+                    zip_target.extractall(TemplatePath)
+
+                # Delete template zip
+                os.remove(zip_to)
+
+            settings.set(setting, False)
+            sublime.save_settings(settings_file)
 
 
 class NewSublimeProjectCommand(sublime_plugin.ApplicationCommand):
-    disallowed_characters = {'\\': '-',
-                             '/': '-',
-                             ':': '-',
-                             '*': '_',
-                             '<': '_',
-                             '>': '_',
-                             '|': '_',
-                             '*': '_',
-                             '"': '_'}
 
-    def run(self, type=None):
-        self.type = type
+    def run(self, type_=None):
+        self.type = type_
         self.populate_vars()
         view = sublime.active_window().show_input_panel(
             'Project Name', "New Project", self.create_project, None, None)
         view.run_command('move_to', {'to': 'hardbol', 'extend': True})
 
     def populate_vars(self):
+        global DefaultVariables
         self.vars = dict()
-        self.vars['type'] = type
-        self.vars['packages_path'] = sublime.packages_path().replace('\\', '/')
+        self.vars.update(DefaultVariables)
+        self.vars['type'] = self.type
 
-        self.populate_var_if_exist('program_files', 'ProgramFiles')
-        self.populate_var_if_exist('program_files_x86', 'ProgramFiles(x86)')
-        self.populate_var_if_exist('program_files_x64', 'ProgramW6432')
+    def get_var(self, k, transform=None):
+        v = self.vars[k]
+        if hasattr(v, '__call__'):
+            v = v(*self.vars)
 
-    def populate_var_if_exist(self, var_name, environ_name):
-        temp = os.getenv(environ_name)
-        if temp is not None:
-            self.vars[var_name] = temp.replace('\\', '/')
-        elif (('ProgramFiles' in environ_name) or
-              ('ProgramW6432' in environ_name)):
-            self.populate_var_if_exist(var_name, 'ProgramFiles')
-        print(self.vars[var_name])
+        if transform is None:
+            return v
+
+        if TRANSFORM_UPPER in transform:
+            v = v.upper()
+        elif TRANSFORM_LOWER in transform:
+            v = v.lower()
+
+        if TRANSFORM_HYPHEN in transform:
+            v = v.replace(" ", "-")
+        elif TRANSFORM_UNDERSCORE in transform:
+            v = v.replace(" ", "_")
+
+        return v
 
     def create_project(self, project_name):
         logger.info('Creating project: %s', project_name)
@@ -140,8 +228,7 @@ class NewSublimeProjectCommand(sublime_plugin.ApplicationCommand):
         self.project_file = None
         self.project_name = project_name
         self.vars['project_name'] = project_name
-        folder_name = NewSublimeProjectCommand.replace_disallowed_characters(
-            project_name)
+        folder_name = replace_disallowed_characters(project_name)
         self.vars['folder_name'] = folder_name
 
         project_root, project_storage = get_project_roots()
@@ -196,24 +283,16 @@ class NewSublimeProjectCommand(sublime_plugin.ApplicationCommand):
                 self.open_project()
                 break
 
-    @staticmethod
-    def replace_disallowed_characters(path):
-        for t, r in NewSublimeProjectCommand.disallowed_characters.items():
-            path = path.replace(t, r)
-        return path
-
     def get_templates(self):
         self.templates = list()
-        for template_path in (x for x in get_template_paths().values() if
-                              os.path.isdir(x)):
-            for d in os.listdir(template_path):
-                path = os.path.join(template_path, d)
-                if os.path.isdir(path):
-                    self.templates.append((d, path))
+        for d in os.listdir(TemplatePath):
+            path = os.path.join(TemplatePath, d)
+            if os.path.isdir(path):
+                self.templates.append((d, path))
 
-    def set_type(self, type):
-        if type != -1:
-            self.type, self.template_folder = self.templates[type]
+    def set_type(self, type_):
+        if type_ != -1:
+            self.type, self.template_folder = self.templates[type_]
             self.vars['type'] = self.type
             self.vars['template_folder'] = self.template_folder.replace(
                 '\\', '/')
@@ -267,7 +346,7 @@ class NewSublimeProjectCommand(sublime_plugin.ApplicationCommand):
             file_to_open = self.project_file.replace('/', '\\')
         else:
             file_to_open = self.project_folder.replace('/', '\\')
-        cmd = '{0} "{1}"'.format(get_program_path(), file_to_open)
+        cmd = '{0} "{1}"'.format(ExecutablePath, file_to_open)
         logger.debug(cmd)
 
         try:
@@ -278,18 +357,20 @@ class NewSublimeProjectCommand(sublime_plugin.ApplicationCommand):
             open_folder(self.project_folder.replace('/', '\\'))
 
     def replace_vars(self, s):
-        matches = re.findall('(\$\{([\w\._\d]+)\})', s)
-        for m in matches:
-            s = s.replace(m[0], self.vars[m[1]])
+        for m in re.findall(r"(\$\{([\w\._\d]+)(:[UL_\-]+)?\})", s):
+            if m[2] is not None:
+                t = m[2][1:]
+            else:
+                t = None
+            s = s.replace(m[0], self.get_var(m[1], t))
+
         return s
 
     def copy_replace_files(self, s, d):
-        source = open(s, 'r')
-        dest = open(d, 'w')
-        for line in source:
-            dest.write(self.replace_vars(line))
-        dest.close()
-        source.close()
+        with open(s, 'r') as source:
+            with open(d, 'w') as dest:
+                for line in source:
+                    dest.write(self.replace_vars(line))
 
 
 class ViewSublimeProjectsCommand(sublime_plugin.ApplicationCommand):
@@ -314,12 +395,6 @@ class ViewSublimeProjectsCommand(sublime_plugin.ApplicationCommand):
 
 class ViewTemplatesCommand(sublime_plugin.ApplicationCommand):
 
-    def run(self, user=False):
-        paths = get_template_paths()
-        if user:
-            template_path = paths['User']
-        else:
-            template_path = paths['Default']
-
-        create_dir(template_path)
-        open_folder(template_path)
+    def run(self):
+        create_dir(TemplatePath)
+        open_folder(TemplatePath)

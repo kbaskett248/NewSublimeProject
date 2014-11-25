@@ -8,5 +8,8 @@
     "use_separate_sublime_project_storage": false,
     
     // Location to store *.sublime_project files if "use_separate_sublime_project_storage" is true
-    "project_storage": "C:/Workspace"
+    "project_storage": "C:/Workspace",
+
+    // Controls whether templates bundled with New Sublime Project are installed
+    "install_templates": true
 }
