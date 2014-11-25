@@ -153,6 +153,10 @@ def setup_default_variables():
 
 def install_templates():
     possible_templates = sublime.find_resources('*.zip')
+
+    if possible_templates and TemplatesToInstall:
+        create_dir(TemplatePath)
+
     for path, settings_file, setting in TemplatesToInstall:
         settings = sublime.load_settings(settings_file)
         if settings.get(setting, False):
