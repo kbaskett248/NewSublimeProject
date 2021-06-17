@@ -1,4 +1,4 @@
-# EntitySelect
+# NewSublimeProject
 
 A [Sublime Text 3](http://www.sublimetext.com/) package that makes it easy to create new projects and an accompanying directory populated with default files.
 
